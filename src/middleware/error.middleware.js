@@ -3,6 +3,6 @@ module.exports = function (err, req, res, next) {
 
   res.status(err.status || 500).json({
     success: false,
-    error: err.message || 'Internal Server Error'
+    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message || 'Internal Server Error'
   });
 };

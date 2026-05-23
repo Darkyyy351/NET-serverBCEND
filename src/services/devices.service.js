@@ -1,41 +1,253 @@
-const fs = require('fs');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
+const { readJsonArray, writeJsonArray } = require('./jsonStore');
 
 const filePath = path.join(__dirname, '../../data/devices.json');
 
 function readData() {
-  return JSON.parse(fs.readFileSync(filePath));
+  return readJsonArray(filePath);
 }
 
 function writeData(data) {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  writeJsonArray(filePath, data);
+}
+
+function newId() {
+  return crypto.randomUUID();
+}
+
+function normalizeDevice(device) {
+  return {
+    id: device.id,
+    name: device.name,
+    ip: device.ip || null,
+    type: device.type || 'esp',
+    status: device.status || 'unknown',
+    firmware: device.firmware || null,
+    capabilities: Array.isArray(device.capabilities) ? device.capabilities : [],
+    lastSeen: device.lastSeen || null,
+    createdAt: device.createdAt || new Date().toISOString(),
+    updatedAt: device.updatedAt || new Date().toISOString(),
+    commands: Array.isArray(device.commands) ? device.commands : []
+  };
+}
+
+function publicDevice(device) {
+  const normalized = normalizeDevice(device);
+  const pendingCommands = normalized.commands.filter(command => command.status === 'queued').length;
+
+  return {
+    id: normalized.id,
+    name: normalized.name,
+    ip: normalized.ip,
+    type: normalized.type,
+    status: normalized.status,
+    firmware: normalized.firmware,
+    capabilities: normalized.capabilities,
+    lastSeen: normalized.lastSeen,
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt,
+    pendingCommands
+  };
+}
+
+function findDevice(devices, id) {
+  return devices.find(device => device.id === id);
 }
 
 exports.getAll = () => {
-  return readData();
+  return readData().map(publicDevice);
 };
 
-exports.create = ({ name, ip }) => {
+exports.create = ({ name, ip, type, firmware, capabilities }) => {
   const devices = readData();
+  const now = new Date().toISOString();
 
   const newDevice = {
-    id: uuidv4(),
+    id: newId(),
     name,
-    ip,
+    ip: ip || null,
+    type: type || 'esp',
     status: 'unknown',
-    lastSeen: null
+    firmware: firmware || null,
+    capabilities: Array.isArray(capabilities) ? capabilities : [],
+    lastSeen: null,
+    createdAt: now,
+    updatedAt: now,
+    commands: []
   };
 
   devices.push(newDevice);
   writeData(devices);
 
-  return newDevice;
+  return publicDevice(newDevice);
+};
+
+exports.register = ({ id, name, ip, type, firmware, capabilities }) => {
+  const devices = readData();
+  const now = new Date().toISOString();
+  const deviceId = id || newId();
+  const existing = findDevice(devices, deviceId);
+
+  if (existing) {
+    existing.name = name || existing.name;
+    existing.ip = ip || existing.ip || null;
+    existing.type = type || existing.type || 'esp';
+    existing.firmware = firmware || existing.firmware || null;
+    existing.capabilities = Array.isArray(capabilities) ? capabilities : existing.capabilities || [];
+    existing.status = 'online';
+    existing.lastSeen = now;
+    existing.updatedAt = now;
+    existing.commands = Array.isArray(existing.commands) ? existing.commands : [];
+
+    writeData(devices);
+    return publicDevice(existing);
+  }
+
+  const device = {
+    id: deviceId,
+    name: name || `ESP ${deviceId.slice(0, 8)}`,
+    ip: ip || null,
+    type: type || 'esp',
+    status: 'online',
+    firmware: firmware || null,
+    capabilities: Array.isArray(capabilities) ? capabilities : [],
+    lastSeen: now,
+    createdAt: now,
+    updatedAt: now,
+    commands: []
+  };
+
+  devices.push(device);
+  writeData(devices);
+
+  return publicDevice(device);
+};
+
+exports.heartbeat = (id, { status, ip, firmware, capabilities } = {}) => {
+  const devices = readData();
+  const device = findDevice(devices, id);
+
+  if (!device) {
+    return null;
+  }
+
+  device.status = status || 'online';
+  device.ip = ip || device.ip || null;
+  device.firmware = firmware || device.firmware || null;
+  device.capabilities = Array.isArray(capabilities) ? capabilities : device.capabilities || [];
+  device.lastSeen = new Date().toISOString();
+  device.updatedAt = device.lastSeen;
+
+  writeData(devices);
+
+  return publicDevice(device);
 };
 
 exports.remove = (id) => {
   const devices = readData();
   const filtered = devices.filter(d => d.id !== id);
 
+  if (filtered.length === devices.length) {
+    return false;
+  }
+
   writeData(filtered);
+  return true;
+};
+
+exports.getCommands = (id) => {
+  const device = findDevice(readData(), id);
+
+  if (!device) {
+    return null;
+  }
+
+  return normalizeDevice(device).commands;
+};
+
+exports.queueCommand = (id, { type, payload }) => {
+  const devices = readData();
+  const device = findDevice(devices, id);
+
+  if (!device) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  device.commands = Array.isArray(device.commands) ? device.commands : [];
+
+  const command = {
+    id: newId(),
+    type,
+    payload: payload || {},
+    status: 'queued',
+    createdAt: now,
+    updatedAt: now,
+    result: null,
+    error: null
+  };
+
+  device.commands.push(command);
+  device.updatedAt = now;
+  writeData(devices);
+
+  return command;
+};
+
+exports.claimNextCommand = (id) => {
+  const devices = readData();
+  const device = findDevice(devices, id);
+
+  if (!device) {
+    return null;
+  }
+
+  device.commands = Array.isArray(device.commands) ? device.commands : [];
+
+  const command = device.commands.find(item => item.status === 'queued');
+
+  if (!command) {
+    return false;
+  }
+
+  const now = new Date().toISOString();
+  command.status = 'running';
+  command.updatedAt = now;
+  command.startedAt = now;
+  device.updatedAt = now;
+
+  writeData(devices);
+
+  return command;
+};
+
+exports.ackCommand = (deviceId, commandId, { status, result, error }) => {
+  const devices = readData();
+  const device = findDevice(devices, deviceId);
+
+  if (!device) {
+    return null;
+  }
+
+  device.commands = Array.isArray(device.commands) ? device.commands : [];
+
+  const command = device.commands.find(item => item.id === commandId);
+
+  if (!command) {
+    return false;
+  }
+
+  const now = new Date().toISOString();
+
+  command.status = status === 'failed' ? 'failed' : 'done';
+  command.result = result || null;
+  command.error = error || null;
+  command.updatedAt = now;
+  command.finishedAt = now;
+  device.updatedAt = now;
+
+  writeData(devices);
+
+  return command;
 };

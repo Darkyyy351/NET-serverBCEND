@@ -1,4 +1,11 @@
 module.exports = function (req, res, next) {
+  if (!process.env.API_TOKEN) {
+    return res.status(503).json({
+      success: false,
+      error: 'API token is not configured'
+    });
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {

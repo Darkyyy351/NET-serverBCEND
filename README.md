@@ -56,6 +56,7 @@ Create `.env` on the server:
 ```bash
 API_TOKEN=use-a-long-random-token
 PORT=3000
+CORS_ORIGIN=http://localhost:5173
 ```
 
 Start the service:

@@ -167,9 +167,10 @@ exports.heartbeat = (id, { status, ip, firmware, capabilities } = {}) => {
 
 exports.remove = (id) => {
   const devices = readData();
+  const device = findDevice(devices, id);
   const filtered = devices.filter(d => d.id !== id);
 
-  if (filtered.length === devices.length) {
+  if (!device) {
     return false;
   }
 
@@ -177,8 +178,8 @@ exports.remove = (id) => {
   logs.append({
     type: 'device',
     level: 'warn',
-    message: `Device removed: ${id}`,
-    meta: { deviceId: id }
+    message: `Device removed: ${device.name}`,
+    meta: { deviceId: id, deviceName: device.name }
   });
   return true;
 };

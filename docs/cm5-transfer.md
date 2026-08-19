@@ -24,7 +24,7 @@ Recommended `.env` for CM5:
 
 ```env
 API_TOKEN=replace-with-long-random-token
-PORT=3000
+BACKEND_PORT=3000
 CORS_ORIGIN=http://CM5_IP_ADDRESS:8080
 NET_RUNTIME=docker
 LOG_RETENTION_LIMIT=500
@@ -71,6 +71,14 @@ http://CM5_IP_ADDRESS:8080
 
 ## Updates
 
+Back up runtime data before updating:
+
+```bash
+cd ~/NET-serverBCEND
+mkdir -p backups
+tar -czf "backups/net-data-$(date +%Y%m%d-%H%M%S).tar.gz" data
+```
+
 Backend:
 
 ```bash
@@ -78,6 +86,15 @@ cd ~/NET-serverBCEND
 git pull
 docker compose up -d --build
 ```
+
+Verify both services after every update:
+
+```bash
+curl --fail http://localhost:3000/api/v1/health
+curl --fail http://localhost:8080/health
+```
+
+The complete first-deploy checklist is in [`cm5-preflight.md`](cm5-preflight.md).
 
 Frontend:
 

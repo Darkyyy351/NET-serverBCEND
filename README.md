@@ -59,7 +59,7 @@ Create `.env` on the server:
 
 ```bash
 API_TOKEN=use-a-long-random-token
-PORT=3000
+BACKEND_PORT=3000
 CORS_ORIGIN=http://localhost:5173
 NET_RUNTIME=docker
 LOG_RETENTION_LIMIT=500
@@ -78,3 +78,5 @@ docker compose ps
 docker compose logs -f app
 curl http://localhost:3000/api/v1/health
 ```
+
+Before the first CM5 deployment, follow [`docs/cm5-preflight.md`](docs/cm5-preflight.md).

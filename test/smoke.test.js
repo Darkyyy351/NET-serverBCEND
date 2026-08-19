@@ -76,11 +76,21 @@ async function main() {
     });
     assert.equal(missingDelete.status, 404);
 
+    const removed = await request(baseUrl, '/api/v1/devices/esp-test-01', {
+      method: 'DELETE'
+    });
+    assert.equal(removed.status, 200);
+
     const logs = await request(baseUrl, '/api/v1/logs');
     assert.equal(logs.status, 200);
     const logsBody = await logs.json();
     assert.equal(logsBody.success, true);
-    assert.ok(logsBody.data.length >= 4);
+    assert.ok(logsBody.data.length >= 5);
+    assert.ok(logsBody.data.some(log => (
+      log.type === 'device' &&
+      log.message === 'Device removed: ESP Test' &&
+      log.meta?.deviceId === 'esp-test-01'
+    )));
   } finally {
     server.close();
     fs.writeFileSync(dataPath, originalData);

@@ -1,4 +1,18 @@
 const deviceService = require("../services/devices.service");
+const allowedDeviceTypes = new Set(["esp", "wled", "sensor", "relay"]);
+
+function isValidIpv4(value) {
+    const parts = String(value).split(".");
+
+    return parts.length === 4 && parts.every(part => {
+        if (!/^\d{1,3}$/.test(part)) {
+            return false;
+        }
+
+        const number = Number(part);
+        return number >= 0 && number <= 255;
+    });
+}
 
 exports.getDevices = (req, res) => {
     const devices = deviceService.getAll();
@@ -12,14 +26,35 @@ exports.getDevices = (req, res) => {
 exports.createDevice = (req, res) => {
     const { name, ip, type, firmware, capabilities } = req.body;
 
-    if (!name || typeof name !== "string") {
+    if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({
             success: false,
             error: "Name is required"
         });
     }
 
-    const device = deviceService.create({ name, ip, type, firmware, capabilities });
+    if (!ip || typeof ip !== "string" || !ip.trim()) {
+        return res.status(400).json({
+            success: false,
+            error: "IP address is required"
+        });
+    }
+
+    if (!isValidIpv4(ip.trim())) {
+        return res.status(400).json({
+            success: false,
+            error: "IP address must be a valid IPv4 address"
+        });
+    }
+
+    if (type && (!allowedDeviceTypes.has(type))) {
+        return res.status(400).json({
+            success: false,
+            error: "Device type is invalid"
+        });
+    }
+
+    const device = deviceService.create({ name: name.trim(), ip: ip.trim(), type, firmware, capabilities });
 
     res.status(201).json({
         success: true,

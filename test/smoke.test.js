@@ -31,6 +31,12 @@ async function main() {
     const health = await fetch(`${baseUrl}/api/v1/health`);
     assert.equal(health.status, 200);
 
+    const invalidDevice = await request(baseUrl, '/api/v1/devices', {
+      method: 'POST',
+      body: JSON.stringify({ name: '', ip: '999.168.1.50', type: 'esp' })
+    });
+    assert.equal(invalidDevice.status, 400);
+
     const register = await request(baseUrl, '/api/v1/devices/register', {
       method: 'POST',
       body: JSON.stringify({

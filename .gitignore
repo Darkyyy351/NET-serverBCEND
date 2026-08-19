@@ -4,3 +4,4 @@ node_modules/
 data/devices.json
 data/logs.json
 data/*.tmp
+backups/

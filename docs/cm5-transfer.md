@@ -83,7 +83,7 @@ Backend:
 
 ```bash
 cd ~/NET-serverBCEND
-git pull
+git pull --ff-only
 docker compose up -d --build
 ```
 
@@ -100,7 +100,7 @@ Frontend:
 
 ```bash
 cd ~/NET-frontend
-git pull
+git pull --ff-only
 docker compose up -d --build
 ```
 

@@ -8,16 +8,28 @@ Run this checklist on the CM5 after cloning both repositories and before exposin
 uname -m
 docker --version
 docker compose version
+docker info
 df -h /
 hostname -I
+ss -ltn | grep -E ':(3000|8080)\\b' || true
+sudo ufw status
 ```
 
 Pass conditions:
 
 - Architecture is `aarch64` or `arm64`.
 - Docker and `docker compose` both respond without errors.
+- `docker info` confirms that the Docker daemon is running.
 - At least 2 GB of free disk space is available for the first build.
 - The CM5 has a stable LAN IP or a DHCP reservation.
+- Ports `3000` and `8080` are not already used by another service.
+
+If UFW is active, allow both NET ports only from the trusted LAN subnet. Replace `LAN_CIDR` with a value such as `192.168.1.0/24`:
+
+```bash
+sudo ufw allow from LAN_CIDR to any port 3000 proto tcp
+sudo ufw allow from LAN_CIDR to any port 8080 proto tcp
+```
 
 ## 2. Configuration
 
@@ -39,12 +51,20 @@ VITE_NET_API_TOKEN=replace-with-the-same-backend-token
 FRONTEND_PORT=8080
 ```
 
+Generate the shared token once, then place the same value in both files:
+
+```bash
+openssl rand -hex 32
+chmod 600 ~/NET-serverBCEND/.env ~/NET-frontend/.env
+```
+
 Pass conditions:
 
 - `API_TOKEN` is not the example value and is identical in both files.
 - `CM5_IP_ADDRESS` is replaced with the real LAN IP in both files.
 - Backend `CORS_ORIGIN` exactly matches the URL used to open the frontend.
 - Neither `.env` file is tracked by Git: `git status --short` must not list it.
+- Both `.env` files are readable only by their owner.
 
 For NET 0.1, keep ports `3000` and `8080` reachable only from the trusted LAN. The frontend token is embedded in its static bundle and is not suitable for public internet exposure.
 

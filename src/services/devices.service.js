@@ -1,6 +1,7 @@
 const path = require('path');
 const crypto = require('crypto');
 const { readJsonArray, writeJsonArray } = require('./jsonStore');
+const logs = require('./logs.service');
 
 const filePath = path.join(__dirname, '../../data/devices.json');
 
@@ -79,6 +80,11 @@ exports.create = ({ name, ip, type, firmware, capabilities }) => {
 
   devices.push(newDevice);
   writeData(devices);
+  logs.append({
+    type: 'device',
+    message: `Device created: ${newDevice.name}`,
+    meta: { deviceId: newDevice.id, ip: newDevice.ip, type: newDevice.type }
+  });
 
   return publicDevice(newDevice);
 };
@@ -101,6 +107,11 @@ exports.register = ({ id, name, ip, type, firmware, capabilities }) => {
     existing.commands = Array.isArray(existing.commands) ? existing.commands : [];
 
     writeData(devices);
+    logs.append({
+      type: 'device',
+      message: `Device registered: ${existing.name}`,
+      meta: { deviceId: existing.id, ip: existing.ip, firmware: existing.firmware }
+    });
     return publicDevice(existing);
   }
 
@@ -120,6 +131,11 @@ exports.register = ({ id, name, ip, type, firmware, capabilities }) => {
 
   devices.push(device);
   writeData(devices);
+  logs.append({
+    type: 'device',
+    message: `Device registered: ${device.name}`,
+    meta: { deviceId: device.id, ip: device.ip, firmware: device.firmware }
+  });
 
   return publicDevice(device);
 };
@@ -140,6 +156,11 @@ exports.heartbeat = (id, { status, ip, firmware, capabilities } = {}) => {
   device.updatedAt = device.lastSeen;
 
   writeData(devices);
+  logs.append({
+    type: 'heartbeat',
+    message: `Heartbeat received from ${device.name}`,
+    meta: { deviceId: device.id, status: device.status, ip: device.ip }
+  });
 
   return publicDevice(device);
 };
@@ -153,6 +174,12 @@ exports.remove = (id) => {
   }
 
   writeData(filtered);
+  logs.append({
+    type: 'device',
+    level: 'warn',
+    message: `Device removed: ${id}`,
+    meta: { deviceId: id }
+  });
   return true;
 };
 
@@ -191,6 +218,11 @@ exports.queueCommand = (id, { type, payload }) => {
   device.commands.push(command);
   device.updatedAt = now;
   writeData(devices);
+  logs.append({
+    type: 'cmd',
+    message: `Command queued: ${type}`,
+    meta: { deviceId: id, commandId: command.id, commandType: type }
+  });
 
   return command;
 };
@@ -218,6 +250,11 @@ exports.claimNextCommand = (id) => {
   device.updatedAt = now;
 
   writeData(devices);
+  logs.append({
+    type: 'cmd',
+    message: `Command claimed: ${command.type}`,
+    meta: { deviceId: id, commandId: command.id, commandType: command.type }
+  });
 
   return command;
 };
@@ -248,6 +285,12 @@ exports.ackCommand = (deviceId, commandId, { status, result, error }) => {
   device.updatedAt = now;
 
   writeData(devices);
+  logs.append({
+    type: 'cmd',
+    level: command.status === 'failed' ? 'error' : 'info',
+    message: `Command ${command.status}: ${command.type}`,
+    meta: { deviceId, commandId, commandType: command.type }
+  });
 
   return command;
 };

@@ -12,6 +12,7 @@ Stable core backend for NET 0.1.
 - ESP heartbeat/status updates
 - Command queue for ESP polling
 - System status endpoint for dashboard service-health cards
+- Persistent event logs for dashboard audit/monitoring views
 - JSON persistence in `data/devices.json`
 - Docker Compose deployment baseline for the CM5 node
 
@@ -36,6 +37,7 @@ Routes:
 - `GET /api/v1/devices/:id/commands/next`
 - `POST /api/v1/devices/:id/commands/:commandId/ack`
 - `GET /api/v1/system/status`
+- `GET /api/v1/logs`
 
 ## Local Development
 
@@ -60,6 +62,7 @@ API_TOKEN=use-a-long-random-token
 PORT=3000
 CORS_ORIGIN=http://localhost:5173
 NET_RUNTIME=docker
+LOG_RETENTION_LIMIT=500
 ```
 
 Start the service:

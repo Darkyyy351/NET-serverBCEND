@@ -4,7 +4,9 @@ const path = require('path');
 const app = require('../src/app');
 
 const dataPath = path.join(__dirname, '../data/devices.json');
+const logsPath = path.join(__dirname, '../data/logs.json');
 const originalData = fs.existsSync(dataPath) ? fs.readFileSync(dataPath, 'utf8') : '[]\n';
+const originalLogs = fs.existsSync(logsPath) ? fs.readFileSync(logsPath, 'utf8') : '[]\n';
 
 function request(baseUrl, route, options = {}) {
   return fetch(`${baseUrl}${route}`, {
@@ -20,6 +22,7 @@ function request(baseUrl, route, options = {}) {
 async function main() {
   process.env.API_TOKEN = 'test-token';
   fs.writeFileSync(dataPath, '[]\n');
+  fs.writeFileSync(logsPath, '[]\n');
 
   const server = app.listen(0);
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -66,9 +69,16 @@ async function main() {
       method: 'DELETE'
     });
     assert.equal(missingDelete.status, 404);
+
+    const logs = await request(baseUrl, '/api/v1/logs');
+    assert.equal(logs.status, 200);
+    const logsBody = await logs.json();
+    assert.equal(logsBody.success, true);
+    assert.ok(logsBody.data.length >= 4);
   } finally {
     server.close();
     fs.writeFileSync(dataPath, originalData);
+    fs.writeFileSync(logsPath, originalLogs);
   }
 }
 

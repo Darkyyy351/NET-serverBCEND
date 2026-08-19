@@ -1,5 +1,6 @@
 const express = require('express');
 const devicesRoutes = require('./routes/devices.routes');
+const systemRoutes = require('./routes/system.routes');
 const errorMiddleware = require('./middleware/error.middleware');
 
 const app = express();
@@ -29,6 +30,7 @@ app.get("/api/v1/health", (req, res) => {
 });
 
 app.use('/api/v1/devices', devicesRoutes);
+app.use('/api/v1/system', systemRoutes);
 
 app.use((req, res) => {
     res.status(404).json({

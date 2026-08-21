@@ -3,5 +3,6 @@ node_modules/
 *.log
 data/devices.json
 data/logs.json
+data/deployment.json
 data/*.tmp
 backups/

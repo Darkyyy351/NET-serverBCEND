@@ -6,9 +6,11 @@ const app = require('../src/app');
 const dataPath = path.join(__dirname, '../data/devices.json');
 const logsPath = path.join(__dirname, '../data/logs.json');
 const deploymentPath = path.join(__dirname, '../data/deployment.json');
+const systemConfigPath = path.join(__dirname, '../data/system.json');
 const originalData = fs.existsSync(dataPath) ? fs.readFileSync(dataPath, 'utf8') : '[]\n';
 const originalLogs = fs.existsSync(logsPath) ? fs.readFileSync(logsPath, 'utf8') : '[]\n';
 const originalDeployment = fs.existsSync(deploymentPath) ? fs.readFileSync(deploymentPath, 'utf8') : null;
+const originalSystemConfig = fs.existsSync(systemConfigPath) ? fs.readFileSync(systemConfigPath, 'utf8') : null;
 
 function request(baseUrl, route, options = {}) {
   return fetch(`${baseUrl}${route}`, {
@@ -29,6 +31,7 @@ async function main() {
   process.env.NET_IMAGE_REF = 'net-backend:backend-test';
   fs.writeFileSync(dataPath, '[]\n');
   fs.writeFileSync(logsPath, '[]\n');
+  fs.writeFileSync(systemConfigPath, '{"mode":"normal"}\n');
   fs.writeFileSync(deploymentPath, `${JSON.stringify({
     status: 'healthy',
     deployedAt: '2026-08-21T19:10:22Z',
@@ -54,6 +57,23 @@ async function main() {
     assert.ok(systemStatusBody.data.host.cpu.cores === null || systemStatusBody.data.host.cpu.cores > 0);
     assert.ok(systemStatusBody.data.host.memory.total > 0);
     assert.ok(systemStatusBody.data.host.storage.total === null || systemStatusBody.data.host.storage.total > 0);
+    assert.equal(systemStatusBody.data.operatingMode.mode, 'normal');
+    assert.equal(systemStatusBody.data.operatingMode.monitoringIntervalSeconds, 1);
+
+    const invalidMode = await request(baseUrl, '/api/v1/system/mode', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'hibernate' })
+    });
+    assert.equal(invalidMode.status, 400);
+
+    const sleepMode = await request(baseUrl, '/api/v1/system/mode', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'sleep' })
+    });
+    assert.equal(sleepMode.status, 200);
+    const sleepModeBody = await sleepMode.json();
+    assert.equal(sleepModeBody.data.operatingMode.mode, 'sleep');
+    assert.equal(sleepModeBody.data.operatingMode.monitoringIntervalSeconds, 30);
 
     const invalidDevice = await request(baseUrl, '/api/v1/devices', {
       method: 'POST',
@@ -72,11 +92,24 @@ async function main() {
     });
     assert.equal(register.status, 201);
 
+    const persistedAfterRegister = JSON.parse(fs.readFileSync(dataPath, 'utf8'))[0].lastSeen;
+    await new Promise(resolve => setTimeout(resolve, 10));
+
     const heartbeat = await request(baseUrl, '/api/v1/devices/esp-test-01/heartbeat', {
       method: 'POST',
       body: JSON.stringify({ status: 'online' })
     });
     assert.equal(heartbeat.status, 200);
+    const heartbeatBody = await heartbeat.json();
+    const persistedAfterSleepHeartbeat = JSON.parse(fs.readFileSync(dataPath, 'utf8'))[0].lastSeen;
+    assert.equal(persistedAfterSleepHeartbeat, persistedAfterRegister);
+    assert.notEqual(heartbeatBody.data.lastSeen, persistedAfterRegister);
+
+    const normalMode = await request(baseUrl, '/api/v1/system/mode', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'normal' })
+    });
+    assert.equal(normalMode.status, 200);
 
     const queued = await request(baseUrl, '/api/v1/devices/esp-test-01/commands', {
       method: 'POST',
@@ -123,6 +156,11 @@ async function main() {
       fs.rmSync(deploymentPath, { force: true });
     } else {
       fs.writeFileSync(deploymentPath, originalDeployment);
+    }
+    if (originalSystemConfig === null) {
+      fs.rmSync(systemConfigPath, { force: true });
+    } else {
+      fs.writeFileSync(systemConfigPath, originalSystemConfig);
     }
   }
 }

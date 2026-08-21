@@ -66,14 +66,14 @@ async function main() {
     });
     assert.equal(invalidMode.status, 400);
 
-    const sleepMode = await request(baseUrl, '/api/v1/system/mode', {
+    const ecoMode = await request(baseUrl, '/api/v1/system/mode', {
       method: 'POST',
-      body: JSON.stringify({ mode: 'sleep' })
+      body: JSON.stringify({ mode: 'eco' })
     });
-    assert.equal(sleepMode.status, 200);
-    const sleepModeBody = await sleepMode.json();
-    assert.equal(sleepModeBody.data.operatingMode.mode, 'sleep');
-    assert.equal(sleepModeBody.data.operatingMode.monitoringIntervalSeconds, 30);
+    assert.equal(ecoMode.status, 200);
+    const ecoModeBody = await ecoMode.json();
+    assert.equal(ecoModeBody.data.operatingMode.mode, 'eco');
+    assert.equal(ecoModeBody.data.operatingMode.monitoringIntervalSeconds, 30);
 
     const invalidDevice = await request(baseUrl, '/api/v1/devices', {
       method: 'POST',
@@ -101,8 +101,8 @@ async function main() {
     });
     assert.equal(heartbeat.status, 200);
     const heartbeatBody = await heartbeat.json();
-    const persistedAfterSleepHeartbeat = JSON.parse(fs.readFileSync(dataPath, 'utf8'))[0].lastSeen;
-    assert.equal(persistedAfterSleepHeartbeat, persistedAfterRegister);
+    const persistedAfterEcoHeartbeat = JSON.parse(fs.readFileSync(dataPath, 'utf8'))[0].lastSeen;
+    assert.equal(persistedAfterEcoHeartbeat, persistedAfterRegister);
     assert.notEqual(heartbeatBody.data.lastSeen, persistedAfterRegister);
 
     const normalMode = await request(baseUrl, '/api/v1/system/mode', {
@@ -113,14 +113,14 @@ async function main() {
 
     const queued = await request(baseUrl, '/api/v1/devices/esp-test-01/commands', {
       method: 'POST',
-      body: JSON.stringify({ type: 'blink', payload: { times: 2 } })
+      body: JSON.stringify({ type: 'identify', payload: { times: 2 } })
     });
     assert.equal(queued.status, 201);
 
     const next = await request(baseUrl, '/api/v1/devices/esp-test-01/commands/next');
     assert.equal(next.status, 200);
     const nextBody = await next.json();
-    assert.equal(nextBody.data.type, 'blink');
+    assert.equal(nextBody.data.type, 'identify');
 
     const ack = await request(baseUrl, `/api/v1/devices/esp-test-01/commands/${nextBody.data.id}/ack`, {
       method: 'POST',

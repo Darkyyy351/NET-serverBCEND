@@ -79,4 +79,4 @@ docker compose logs -f app
 curl http://localhost:3000/api/v1/health
 ```
 
-Before the first CM5 deployment, follow [`docs/cm5-preflight.md`](docs/cm5-preflight.md).
+Before the first CM5 deployment, follow [`docs/cm5-preflight.md`](docs/cm5-preflight.md). Routine CM5 updates are orchestrated by the separate [`NET-deploy`](https://github.com/Darkyyy351/NET-deploy) repository.

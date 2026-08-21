@@ -7,6 +7,7 @@ This is the first stable transfer path for running NET on the CM5 with Docker.
 - CM5 runs Ubuntu Server with Docker and Docker Compose installed.
 - Backend repo: `https://github.com/Darkyyy351/NET-serverBCEND.git`
 - Frontend repo: `https://github.com/Darkyyy351/NET-frontend.git`
+- Deployment repo: `https://github.com/Darkyyy351/NET-deploy.git`
 - Backend listens on port `3000`.
 - Frontend listens on port `8080`.
 
@@ -71,38 +72,17 @@ http://CM5_IP_ADDRESS:8080
 
 ## Updates
 
-Back up runtime data before updating:
+Use the dedicated deployment repository for routine updates:
 
 ```bash
-cd ~/NET-serverBCEND
-mkdir -p backups
-tar -czf "backups/net-data-$(date +%Y%m%d-%H%M%S).tar.gz" data
+cd ~/apps/NET-deploy
+git pull --ff-only origin main
+./update.sh
 ```
 
-Backend:
+The updater validates both application repositories, backs up backend data, builds uniquely tagged images while the current containers remain online, waits for both Docker healthchecks and restores both previous images if either service fails. It does not edit `.env` files or manage Uptime Kuma.
 
-```bash
-cd ~/NET-serverBCEND
-git pull --ff-only
-docker compose up -d --build
-```
-
-Verify both services after every update:
-
-```bash
-curl --fail http://localhost:3000/api/v1/health
-curl --fail http://localhost:8080/health
-```
-
-The complete first-deploy checklist is in [`cm5-preflight.md`](cm5-preflight.md).
-
-Frontend:
-
-```bash
-cd ~/NET-frontend
-git pull --ff-only
-docker compose up -d --build
-```
+The complete first-deploy checklist is in [`cm5-preflight.md`](cm5-preflight.md). The manual `git pull --ff-only` and `docker compose up -d --build` procedure remains a recovery fallback, not the normal update path.
 
 ## Notes
 

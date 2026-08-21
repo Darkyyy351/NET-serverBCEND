@@ -124,18 +124,22 @@ Pass condition: the disposable device is still present after restart. Remove it 
 
 ## 6. Update Routine
 
-Before every update:
+Clone the deployment tooling once:
 
 ```bash
-cd ~/NET-serverBCEND
-mkdir -p backups
-tar -czf "backups/net-data-$(date +%Y%m%d-%H%M%S).tar.gz" data
-git pull --ff-only
-docker compose up -d --build
-
-cd ~/NET-frontend
-git pull --ff-only
-docker compose up -d --build
+cd ~/apps
+git clone https://github.com/Darkyyy351/NET-deploy.git
+chmod +x ~/apps/NET-deploy/update.sh
 ```
 
-Use `git pull --ff-only` on the CM5 so deployment stops instead of creating an accidental server-side merge. If an update fails, keep the data backup and inspect `docker compose logs --tail=100` before changing anything else.
+Then use this routine for every update:
+
+```bash
+cd ~/apps/NET-deploy
+git pull --ff-only origin main
+./update.sh
+```
+
+The script stops before deployment if either application repository is not on a clean `main` branch or if the current images cannot be restored. It stores timestamped data backups under `~/apps/net-backups/` and automatically rolls both services back when a new container fails its healthcheck.
+
+If an update fails, keep the generated backup and inspect `docker compose logs --tail=100` in both application repositories before changing anything else.

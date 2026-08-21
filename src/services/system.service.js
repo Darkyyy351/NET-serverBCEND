@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const packageInfo = require('../../package.json');
+const hostTelemetry = require('./hostTelemetry.service');
 
 const deploymentPath = path.join(__dirname, '../../data/deployment.json');
 
@@ -101,6 +102,7 @@ exports.getStatus = () => {
   return {
     build: getBuildStatus(),
     deployment: getDeploymentStatus(),
+    host: hostTelemetry.getHostTelemetry(),
     runtime: getRuntimeStatus(),
     services: getServices()
   };

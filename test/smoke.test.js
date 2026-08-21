@@ -50,6 +50,10 @@ async function main() {
     assert.equal(systemStatusBody.data.build.commit, 'backend-test');
     assert.equal(systemStatusBody.data.deployment.status, 'healthy');
     assert.equal(systemStatusBody.data.deployment.frontend.commit, 'frontend-test');
+    assert.equal(typeof systemStatusBody.data.host.cpu, 'object');
+    assert.ok(systemStatusBody.data.host.cpu.cores === null || systemStatusBody.data.host.cpu.cores > 0);
+    assert.ok(systemStatusBody.data.host.memory.total > 0);
+    assert.ok(systemStatusBody.data.host.storage.total === null || systemStatusBody.data.host.storage.total > 0);
 
     const invalidDevice = await request(baseUrl, '/api/v1/devices', {
       method: 'POST',

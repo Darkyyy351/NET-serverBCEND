@@ -5,8 +5,10 @@ const app = require('../src/app');
 
 const dataPath = path.join(__dirname, '../data/devices.json');
 const logsPath = path.join(__dirname, '../data/logs.json');
+const deploymentPath = path.join(__dirname, '../data/deployment.json');
 const originalData = fs.existsSync(dataPath) ? fs.readFileSync(dataPath, 'utf8') : '[]\n';
 const originalLogs = fs.existsSync(logsPath) ? fs.readFileSync(logsPath, 'utf8') : '[]\n';
+const originalDeployment = fs.existsSync(deploymentPath) ? fs.readFileSync(deploymentPath, 'utf8') : null;
 
 function request(baseUrl, route, options = {}) {
   return fetch(`${baseUrl}${route}`, {
@@ -21,8 +23,18 @@ function request(baseUrl, route, options = {}) {
 
 async function main() {
   process.env.API_TOKEN = 'test-token';
+  process.env.NET_VERSION = '0.2.0-test';
+  process.env.NET_COMMIT_SHA = 'backend-test';
+  process.env.NET_BUILD_TIME = '2026-08-21T19:00:00Z';
+  process.env.NET_IMAGE_REF = 'net-backend:backend-test';
   fs.writeFileSync(dataPath, '[]\n');
   fs.writeFileSync(logsPath, '[]\n');
+  fs.writeFileSync(deploymentPath, `${JSON.stringify({
+    status: 'healthy',
+    deployedAt: '2026-08-21T19:10:22Z',
+    backend: { commit: 'backend-test', image: 'net-backend:backend-test' },
+    frontend: { commit: 'frontend-test', image: 'net-frontend:frontend-test' }
+  }, null, 2)}\n`);
 
   const server = app.listen(0);
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -30,6 +42,14 @@ async function main() {
   try {
     const health = await fetch(`${baseUrl}/api/v1/health`);
     assert.equal(health.status, 200);
+
+    const systemStatus = await request(baseUrl, '/api/v1/system/status');
+    assert.equal(systemStatus.status, 200);
+    const systemStatusBody = await systemStatus.json();
+    assert.equal(systemStatusBody.data.build.version, '0.2.0-test');
+    assert.equal(systemStatusBody.data.build.commit, 'backend-test');
+    assert.equal(systemStatusBody.data.deployment.status, 'healthy');
+    assert.equal(systemStatusBody.data.deployment.frontend.commit, 'frontend-test');
 
     const invalidDevice = await request(baseUrl, '/api/v1/devices', {
       method: 'POST',
@@ -95,6 +115,11 @@ async function main() {
     server.close();
     fs.writeFileSync(dataPath, originalData);
     fs.writeFileSync(logsPath, originalLogs);
+    if (originalDeployment === null) {
+      fs.rmSync(deploymentPath, { force: true });
+    } else {
+      fs.writeFileSync(deploymentPath, originalDeployment);
+    }
   }
 }
 

@@ -1,6 +1,12 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        NET_VERSION: ${NET_VERSION:-0.2.0-dev.0}
+        NET_COMMIT_SHA: ${NET_COMMIT_SHA:-development}
+        NET_BUILD_TIME: ${NET_BUILD_TIME:-unknown}
+        NET_IMAGE_REF: ${NET_IMAGE_REF:-local}
     container_name: net-backend
     restart: unless-stopped
     ports:

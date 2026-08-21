@@ -2,9 +2,14 @@ const path = require('path');
 const { readJsonObject, writeJsonObject } = require('./jsonStore');
 
 const filePath = path.join(__dirname, '../../data/system.json');
-const modes = new Set(['normal', 'sleep']);
+const modes = new Set(['normal', 'eco']);
 const defaults = { mode: 'normal' };
 let cachedConfig = null;
+
+function normalizeMode(mode) {
+  // NET briefly used "sleep" for this application-level mode before 0.2.
+  return mode === 'sleep' ? 'eco' : mode;
+}
 
 function readConfig() {
   if (cachedConfig) {
@@ -12,21 +17,20 @@ function readConfig() {
   }
 
   const config = readJsonObject(filePath, defaults);
-  cachedConfig = {
-    mode: modes.has(config.mode) ? config.mode : defaults.mode
-  };
+  const mode = normalizeMode(config.mode);
+  cachedConfig = { mode: modes.has(mode) ? mode : defaults.mode };
 
   return { ...cachedConfig };
 }
 
 function getStatus() {
   const { mode } = readConfig();
-  const sleeping = mode === 'sleep';
+  const eco = mode === 'eco';
 
   return {
     mode,
-    monitoringIntervalSeconds: sleeping ? 30 : 1,
-    heartbeatPersistenceSeconds: sleeping ? 60 : 0
+    monitoringIntervalSeconds: eco ? 30 : 1,
+    heartbeatPersistenceSeconds: eco ? 60 : 0
   };
 }
 

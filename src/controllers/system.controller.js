@@ -15,7 +15,7 @@ exports.setOperatingMode = (req, res) => {
   if (!result) {
     return res.status(400).json({
       success: false,
-      error: 'Mode must be normal or sleep'
+      error: 'Mode must be normal or eco'
     });
   }
 

@@ -40,7 +40,39 @@ function writeJsonArray(filePath, data) {
   fs.renameSync(tempPath, filePath);
 }
 
+function readJsonObject(filePath, fallback = {}) {
+  ensureDirectory(filePath);
+
+  if (!fs.existsSync(filePath)) {
+    writeJsonObject(filePath, fallback);
+    return { ...fallback };
+  }
+
+  const raw = fs.readFileSync(filePath, 'utf8').trim();
+  const data = raw ? JSON.parse(raw) : fallback;
+
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(`${path.basename(filePath)} must contain a JSON object`);
+  }
+
+  return data;
+}
+
+function writeJsonObject(filePath, data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('JSON object store only accepts objects');
+  }
+
+  ensureDirectory(filePath);
+
+  const tempPath = `${filePath}.tmp`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(data, null, 2)}\n`);
+  fs.renameSync(tempPath, filePath);
+}
+
 module.exports = {
   readJsonArray,
-  writeJsonArray
+  writeJsonArray,
+  readJsonObject,
+  writeJsonObject
 };

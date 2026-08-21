@@ -4,5 +4,6 @@ node_modules/
 data/devices.json
 data/logs.json
 data/deployment.json
+data/system.json
 data/*.tmp
 backups/

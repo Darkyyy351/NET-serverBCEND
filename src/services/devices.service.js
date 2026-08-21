@@ -2,6 +2,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { readJsonArray, writeJsonArray } = require('./jsonStore');
 const logs = require('./logs.service');
+const systemConfig = require('./systemConfig.service');
 
 const filePath = path.join(__dirname, '../../data/devices.json');
 
@@ -148,19 +149,40 @@ exports.heartbeat = (id, { status, ip, firmware, capabilities } = {}) => {
     return null;
   }
 
-  device.status = status || 'online';
-  device.ip = ip || device.ip || null;
-  device.firmware = firmware || device.firmware || null;
-  device.capabilities = Array.isArray(capabilities) ? capabilities : device.capabilities || [];
-  device.lastSeen = new Date().toISOString();
+  const nextStatus = status || 'online';
+  const nextIp = ip || device.ip || null;
+  const nextFirmware = firmware || device.firmware || null;
+  const nextCapabilities = Array.isArray(capabilities) ? capabilities : device.capabilities || [];
+  const metadataChanged = (
+    device.status !== nextStatus ||
+    (device.ip || null) !== nextIp ||
+    (device.firmware || null) !== nextFirmware ||
+    JSON.stringify(device.capabilities || []) !== JSON.stringify(nextCapabilities)
+  );
+  const mode = systemConfig.getStatus();
+  const now = new Date();
+  const lastPersistedAt = device.lastSeen ? Date.parse(device.lastSeen) : 0;
+  const persistenceDue = (
+    mode.heartbeatPersistenceSeconds === 0 ||
+    !Number.isFinite(lastPersistedAt) ||
+    now.getTime() - lastPersistedAt >= mode.heartbeatPersistenceSeconds * 1000
+  );
+
+  device.status = nextStatus;
+  device.ip = nextIp;
+  device.firmware = nextFirmware;
+  device.capabilities = nextCapabilities;
+  device.lastSeen = now.toISOString();
   device.updatedAt = device.lastSeen;
 
-  writeData(devices);
-  logs.append({
-    type: 'heartbeat',
-    message: `Heartbeat received from ${device.name}`,
-    meta: { deviceId: device.id, status: device.status, ip: device.ip }
-  });
+  if (metadataChanged || persistenceDue) {
+    writeData(devices);
+    logs.append({
+      type: 'heartbeat',
+      message: `Heartbeat received from ${device.name}`,
+      meta: { deviceId: device.id, status: device.status, ip: device.ip }
+    });
+  }
 
   return publicDevice(device);
 };

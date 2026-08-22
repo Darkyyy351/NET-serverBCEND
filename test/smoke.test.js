@@ -74,6 +74,17 @@ async function main() {
     assert.equal(systemStatusBody.data.operatingMode.mode, 'normal');
     assert.equal(systemStatusBody.data.operatingMode.monitoringIntervalSeconds, 1);
 
+    const fanControlStatus = await request(baseUrl, '/api/v1/system/fan-control');
+    assert.equal(fanControlStatus.status, 200);
+    const fanControlStatusBody = await fanControlStatus.json();
+    assert.equal(fanControlStatusBody.data.available, false);
+
+    const invalidFanTest = await request(baseUrl, '/api/v1/system/fan-control/test', {
+      method: 'POST',
+      body: JSON.stringify({ state: 5, duration: 60 })
+    });
+    assert.equal(invalidFanTest.status, 400);
+
     const invalidMode = await request(baseUrl, '/api/v1/system/mode', {
       method: 'POST',
       body: JSON.stringify({ mode: 'hibernate' })

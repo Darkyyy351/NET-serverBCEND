@@ -7,6 +7,8 @@ const dataPath = path.join(__dirname, '../data/devices.json');
 const logsPath = path.join(__dirname, '../data/logs.json');
 const deploymentPath = path.join(__dirname, '../data/deployment.json');
 const systemConfigPath = path.join(__dirname, '../data/system.json');
+const hwmonRoot = path.join(__dirname, 'tmp-hwmon');
+const fanHwmonPath = path.join(hwmonRoot, 'hwmon3');
 const originalData = fs.existsSync(dataPath) ? fs.readFileSync(dataPath, 'utf8') : '[]\n';
 const originalLogs = fs.existsSync(logsPath) ? fs.readFileSync(logsPath, 'utf8') : '[]\n';
 const originalDeployment = fs.existsSync(deploymentPath) ? fs.readFileSync(deploymentPath, 'utf8') : null;
@@ -29,6 +31,12 @@ async function main() {
   process.env.NET_COMMIT_SHA = 'backend-test';
   process.env.NET_BUILD_TIME = '2026-08-21T19:00:00Z';
   process.env.NET_IMAGE_REF = 'net-backend:backend-test';
+  process.env.NET_HWMON_ROOT = hwmonRoot;
+  fs.mkdirSync(fanHwmonPath, { recursive: true });
+  fs.writeFileSync(path.join(fanHwmonPath, 'name'), 'pwmfan\n');
+  fs.writeFileSync(path.join(fanHwmonPath, 'pwm1'), '128\n');
+  fs.writeFileSync(path.join(fanHwmonPath, 'fan1_input'), '4200\n');
+  fs.writeFileSync(path.join(fanHwmonPath, 'pwm1_enable'), '1\n');
   fs.writeFileSync(dataPath, '[]\n');
   fs.writeFileSync(logsPath, '[]\n');
   fs.writeFileSync(systemConfigPath, '{"mode":"normal"}\n');
@@ -57,6 +65,12 @@ async function main() {
     assert.ok(systemStatusBody.data.host.cpu.cores === null || systemStatusBody.data.host.cpu.cores > 0);
     assert.ok(systemStatusBody.data.host.memory.total > 0);
     assert.ok(systemStatusBody.data.host.storage.total === null || systemStatusBody.data.host.storage.total > 0);
+    assert.equal(systemStatusBody.data.host.fan.available, true);
+    assert.equal(systemStatusBody.data.host.fan.driver, 'pwmfan');
+    assert.equal(systemStatusBody.data.host.fan.rpm, 4200);
+    assert.equal(systemStatusBody.data.host.fan.pwm, 128);
+    assert.equal(systemStatusBody.data.host.fan.pwmPercent, 50.2);
+    assert.equal(systemStatusBody.data.host.fan.controlMode, 1);
     assert.equal(systemStatusBody.data.operatingMode.mode, 'normal');
     assert.equal(systemStatusBody.data.operatingMode.monitoringIntervalSeconds, 1);
 
@@ -150,6 +164,7 @@ async function main() {
     )));
   } finally {
     server.close();
+    fs.rmSync(hwmonRoot, { recursive: true, force: true });
     fs.writeFileSync(dataPath, originalData);
     fs.writeFileSync(logsPath, originalLogs);
     if (originalDeployment === null) {

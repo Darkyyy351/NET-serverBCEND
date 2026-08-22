@@ -22,6 +22,71 @@ function safeRead(filePath) {
   }
 }
 
+function readNumber(filePath) {
+  const raw = safeRead(filePath);
+
+  if (raw === null || raw === '') {
+    return null;
+  }
+
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function isFanHwmon(hwmonPath) {
+  return readNumber(path.join(hwmonPath, 'pwm1')) !== null &&
+    readNumber(path.join(hwmonPath, 'fan1_input')) !== null;
+}
+
+function findFanHwmonPath() {
+  const configuredPath = process.env.NET_FAN_HWMON_PATH;
+
+  if (configuredPath && isFanHwmon(configuredPath)) {
+    return configuredPath;
+  }
+
+  const hwmonRoot = process.env.NET_HWMON_ROOT || '/sys/class/hwmon';
+
+  try {
+    const candidates = fs.readdirSync(hwmonRoot)
+      .filter((entry) => entry.startsWith('hwmon'))
+      .map((entry) => path.join(hwmonRoot, entry))
+      .filter(isFanHwmon);
+
+    return candidates.find((candidate) => (
+      /pwm.?fan|cooling.?fan|rpi/i.test(safeRead(path.join(candidate, 'name')) || '')
+    )) || candidates[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+function getFanTelemetry() {
+  const hwmonPath = findFanHwmonPath();
+
+  if (!hwmonPath) {
+    return {
+      available: false,
+      driver: null,
+      rpm: null,
+      pwm: null,
+      pwmPercent: null,
+      controlMode: null
+    };
+  }
+
+  const pwm = readNumber(path.join(hwmonPath, 'pwm1'));
+
+  return {
+    available: true,
+    driver: safeRead(path.join(hwmonPath, 'name')),
+    rpm: readNumber(path.join(hwmonPath, 'fan1_input')),
+    pwm,
+    pwmPercent: pwm === null ? null : round((Math.min(Math.max(pwm, 0), 255) / 255) * 100),
+    controlMode: readNumber(path.join(hwmonPath, 'pwm1_enable'))
+  };
+}
+
 function readCpuSample() {
   try {
     const cpus = os.cpus();
@@ -184,6 +249,7 @@ exports.getHostTelemetry = () => ({
   cpu: getCpuTelemetry(),
   memory: getMemoryTelemetry(),
   temperatureC: getTemperature(),
+  fan: getFanTelemetry(),
   storage: getStorageTelemetry()
 });
 

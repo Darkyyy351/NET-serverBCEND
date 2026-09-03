@@ -9,7 +9,7 @@ Stable core backend for NET 0.1.
 - Shared bearer-token authentication
 - Device CRUD
 - ESP self-registration
-- ESP heartbeat/status updates
+- ESP heartbeat updates with automatic offline detection
 - Command queue for ESP polling
 - System status endpoint for dashboard service-health cards
 - Persistent event logs for dashboard audit/monitoring views
@@ -63,6 +63,7 @@ BACKEND_PORT=3000
 CORS_ORIGIN=http://localhost:5173
 NET_RUNTIME=docker
 LOG_RETENTION_LIMIT=500
+DEVICE_OFFLINE_AFTER_SECONDS=35
 ```
 
 Start the service:

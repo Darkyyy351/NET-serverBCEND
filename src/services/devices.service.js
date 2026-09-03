@@ -5,6 +5,8 @@ const logs = require('./logs.service');
 const systemConfig = require('./systemConfig.service');
 
 const filePath = path.join(__dirname, '../../data/devices.json');
+const DEFAULT_OFFLINE_AFTER_SECONDS = 35;
+const liveLastSeen = new Map();
 
 function readData() {
   return readJsonArray(filePath);
@@ -34,19 +36,58 @@ function normalizeDevice(device) {
   };
 }
 
+function offlineAfterMs() {
+  const configured = Number(process.env.DEVICE_OFFLINE_AFTER_SECONDS);
+  const seconds = Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_OFFLINE_AFTER_SECONDS;
+
+  return seconds * 1000;
+}
+
+function latestLastSeen(device) {
+  const persisted = device.lastSeen ? Date.parse(device.lastSeen) : NaN;
+  const live = liveLastSeen.get(device.id);
+
+  if (Number.isFinite(live) && (!Number.isFinite(persisted) || live > persisted)) {
+    return new Date(live).toISOString();
+  }
+
+  return device.lastSeen || null;
+}
+
+function effectiveStatus(device, lastSeen) {
+  if (!lastSeen) {
+    return device.status === 'online' ? 'unknown' : device.status;
+  }
+
+  const lastSeenAt = Date.parse(lastSeen);
+
+  if (!Number.isFinite(lastSeenAt)) {
+    return 'unknown';
+  }
+
+  if (Date.now() - lastSeenAt > offlineAfterMs()) {
+    return 'offline';
+  }
+
+  return device.status;
+}
+
 function publicDevice(device) {
   const normalized = normalizeDevice(device);
   const pendingCommands = normalized.commands.filter(command => command.status === 'queued').length;
+  const lastSeen = latestLastSeen(normalized);
 
   return {
     id: normalized.id,
     name: normalized.name,
     ip: normalized.ip,
     type: normalized.type,
-    status: normalized.status,
+    status: effectiveStatus(normalized, lastSeen),
     firmware: normalized.firmware,
     capabilities: normalized.capabilities,
-    lastSeen: normalized.lastSeen,
+    lastSeen,
     createdAt: normalized.createdAt,
     updatedAt: normalized.updatedAt,
     pendingCommands
@@ -106,6 +147,7 @@ exports.register = ({ id, name, ip, type, firmware, capabilities }) => {
     existing.lastSeen = now;
     existing.updatedAt = now;
     existing.commands = Array.isArray(existing.commands) ? existing.commands : [];
+    liveLastSeen.set(existing.id, Date.parse(now));
 
     writeData(devices);
     logs.append({
@@ -131,6 +173,7 @@ exports.register = ({ id, name, ip, type, firmware, capabilities }) => {
   };
 
   devices.push(device);
+  liveLastSeen.set(device.id, Date.parse(now));
   writeData(devices);
   logs.append({
     type: 'device',
@@ -161,6 +204,7 @@ exports.heartbeat = (id, { status, ip, firmware, capabilities } = {}) => {
   );
   const mode = systemConfig.getStatus();
   const now = new Date();
+  liveLastSeen.set(device.id, now.getTime());
   const lastPersistedAt = device.lastSeen ? Date.parse(device.lastSeen) : 0;
   const persistenceDue = (
     mode.heartbeatPersistenceSeconds === 0 ||
@@ -197,6 +241,7 @@ exports.remove = (id) => {
   }
 
   writeData(filtered);
+  liveLastSeen.delete(id);
   logs.append({
     type: 'device',
     level: 'warn',

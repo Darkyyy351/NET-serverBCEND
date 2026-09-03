@@ -117,6 +117,13 @@ async function main() {
     });
     assert.equal(register.status, 201);
 
+    process.env.DEVICE_OFFLINE_AFTER_SECONDS = '0.01';
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const staleDevices = await request(baseUrl, '/api/v1/devices');
+    const staleDevicesBody = await staleDevices.json();
+    assert.equal(staleDevicesBody.data[0].status, 'offline');
+    process.env.DEVICE_OFFLINE_AFTER_SECONDS = '35';
+
     const persistedAfterRegister = JSON.parse(fs.readFileSync(dataPath, 'utf8'))[0].lastSeen;
     await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -129,6 +136,11 @@ async function main() {
     const persistedAfterEcoHeartbeat = JSON.parse(fs.readFileSync(dataPath, 'utf8'))[0].lastSeen;
     assert.equal(persistedAfterEcoHeartbeat, persistedAfterRegister);
     assert.notEqual(heartbeatBody.data.lastSeen, persistedAfterRegister);
+
+    const devicesAfterEcoHeartbeat = await request(baseUrl, '/api/v1/devices');
+    const devicesAfterEcoHeartbeatBody = await devicesAfterEcoHeartbeat.json();
+    assert.equal(devicesAfterEcoHeartbeatBody.data[0].status, 'online');
+    assert.equal(devicesAfterEcoHeartbeatBody.data[0].lastSeen, heartbeatBody.data.lastSeen);
 
     const normalMode = await request(baseUrl, '/api/v1/system/mode', {
       method: 'POST',

@@ -1,5 +1,13 @@
 # NET Backend
 
+## Device admission and active verification
+
+New self-registrations require a stable ID and persist as `pending`. Existing records without an admission field remain approved. `GET /api/v1/devices/requests` lists pending requests; `POST /api/v1/devices/:id/admission` accepts `{ "decision": "approved" }` or `rejected`. Repeated registration cannot change that decision. Pending/rejected devices cannot heartbeat, read, queue, claim or acknowledge commands. Manually created devices remain approved.
+
+This release still uses a shared bearer: admission is an operator workflow, not isolation from a malicious holder of that credential. Per-device credentials and separate administrator authorization are required before treating this as a security boundary. A rejected ID stays rejected; changing IDs is not a trusted hardware identity.
+
+`POST /api/v1/devices/:id/verify` starts a six-second `probe` for capable firmware. Read `/api/v1/devices/:id/verify/:commandId` for `checking`, `confirmed` or `no-response`. No response does not override heartbeat-based presence. Old firmware returns `unsupported`. Expired probes are never executed or accepted as confirmation. Deploy backend, frontend, then firmware `0.2.0-irl.4`; until flashed, existing nodes retain normal operation but cannot actively verify.
+
 Stable core backend for NET 0.1.
 
 ## What This Core Provides

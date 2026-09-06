@@ -63,6 +63,15 @@ exports.createDevice = (req, res) => {
 };
 
 exports.registerDevice = (req, res) => {
+    const { id, name, firmware, type, ip, capabilities } = req.body || {};
+    if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(id) ||
+        (name !== undefined && (typeof name !== 'string' || name.length > 100)) ||
+        (firmware !== undefined && (typeof firmware !== 'string' || firmware.length > 80)) ||
+        (type !== undefined && !allowedDeviceTypes.has(type)) ||
+        (ip !== undefined && !isValidIpv4(ip)) ||
+        (capabilities !== undefined && (!Array.isArray(capabilities) || capabilities.length > 20 || capabilities.some(c => typeof c !== 'string' || c.length > 40)))) {
+        return res.status(400).json({ success: false, error: 'Invalid device registration' });
+    }
     const device = deviceService.register(req.body || {});
 
     res.status(201).json({

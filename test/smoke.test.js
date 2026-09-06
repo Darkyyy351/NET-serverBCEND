@@ -116,6 +116,21 @@ async function main() {
       })
     });
     assert.equal(register.status, 201);
+    assert.equal((await register.json()).data.admission, 'pending');
+    assert.equal((await (await request(baseUrl, '/api/v1/devices')).json()).data.length, 0);
+    assert.equal((await request(baseUrl, '/api/v1/devices/esp-test-01/commands/next')).status, 403);
+    const duplicate = await request(baseUrl, '/api/v1/devices/register', { method: 'POST', body: JSON.stringify({ id: 'esp-test-01', admission: 'approved' }) });
+    assert.equal((await duplicate.json()).data.admission, 'pending');
+    assert.equal((await (await request(baseUrl, '/api/v1/devices/requests')).json()).data.length, 1);
+    assert.equal((await request(baseUrl, '/api/v1/devices/esp-test-01/admission', { method: 'POST', body: JSON.stringify({ decision: 'approved' }) })).status, 200);
+
+    await request(baseUrl, '/api/v1/devices/register', { method: 'POST', body: JSON.stringify({ id: 'esp-rejected' }) });
+    await request(baseUrl, '/api/v1/devices/esp-rejected/admission', { method: 'POST', body: JSON.stringify({ decision: 'rejected' }) });
+    const rejected = await request(baseUrl, '/api/v1/devices/register', { method: 'POST', body: JSON.stringify({ id: 'esp-rejected' }) });
+    assert.equal((await rejected.json()).data.admission, 'rejected');
+    assert.equal((await request(baseUrl, '/api/v1/devices/esp-rejected/heartbeat', { method: 'POST', body: '{}' })).status, 403);
+    assert.equal((await request(baseUrl, '/api/v1/devices/esp-rejected/commands', { method: 'POST', body: JSON.stringify({ type: 'identify' }) })).status, 403);
+    assert.equal(JSON.parse(fs.readFileSync(dataPath, 'utf8')).find(d => d.id === 'esp-rejected').admission, 'rejected');
 
     process.env.DEVICE_OFFLINE_AFTER_SECONDS = '0.01';
     await new Promise(resolve => setTimeout(resolve, 20));
@@ -164,6 +179,23 @@ async function main() {
       body: JSON.stringify({ status: 'done', result: { ok: true } })
     });
     assert.equal(ack.status, 200);
+    const unsupported = await request(baseUrl, '/api/v1/devices/esp-test-01/verify', { method: 'POST', body: '{}' });
+    assert.equal((await unsupported.json()).data.status, 'unsupported');
+    await request(baseUrl, '/api/v1/devices/esp-test-01/heartbeat', { method: 'POST', body: JSON.stringify({ capabilities: ['probe'] }) });
+    const probe = (await (await request(baseUrl, '/api/v1/devices/esp-test-01/verify', { method: 'POST', body: '{}' })).json()).data;
+    const repeated = (await (await request(baseUrl, '/api/v1/devices/esp-test-01/verify', { method: 'POST', body: '{}' })).json()).data;
+    assert.equal(repeated.id, probe.id);
+    const claimed = (await (await request(baseUrl, '/api/v1/devices/esp-test-01/commands/next')).json()).data;
+    assert.equal(claimed.id, probe.id);
+    await request(baseUrl, `/api/v1/devices/esp-test-01/commands/${probe.id}/ack`, { method: 'POST', body: JSON.stringify({ status: 'done' }) });
+    assert.equal((await (await request(baseUrl, `/api/v1/devices/esp-test-01/verify/${probe.id}`)).json()).data.status, 'confirmed');
+    const expired = (await (await request(baseUrl, '/api/v1/devices/esp-test-01/verify', { method: 'POST', body: '{}' })).json()).data;
+    const stored = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+    stored.find(d => d.id === 'esp-test-01').commands.find(c => c.id === expired.id).expiresAt = new Date(0).toISOString();
+    fs.writeFileSync(dataPath, JSON.stringify(stored));
+    assert.equal((await (await request(baseUrl, `/api/v1/devices/esp-test-01/verify/${expired.id}`)).json()).data.status, 'no-response');
+    assert.equal((await (await request(baseUrl, '/api/v1/devices/esp-test-01/commands/next')).json()).data, null);
+    assert.equal((await request(baseUrl, `/api/v1/devices/esp-test-01/commands/${expired.id}/ack`, { method: 'POST', body: JSON.stringify({ status: 'done' }) })).status, 404);
 
     const missingDelete = await request(baseUrl, '/api/v1/devices/missing-device', {
       method: 'DELETE'

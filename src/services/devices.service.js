@@ -23,6 +23,7 @@ function newId() {
 function normalizeDevice(device) {
   return {
     id: device.id,
+    admission: device.admission || 'approved',
     name: device.name,
     ip: device.ip || null,
     type: device.type || 'esp',
@@ -81,6 +82,7 @@ function publicDevice(device) {
 
   return {
     id: normalized.id,
+    admission: normalized.admission,
     name: normalized.name,
     ip: normalized.ip,
     type: normalized.type,
@@ -99,7 +101,30 @@ function findDevice(devices, id) {
 }
 
 exports.getAll = () => {
-  return readData().map(publicDevice);
+  return readData().filter(d => !d.admission || d.admission === 'approved').map(publicDevice);
+};
+
+exports.getRequests = () => readData().filter(d => d.admission === 'pending').map(publicDevice);
+
+exports.decideAdmission = (id, decision) => {
+  const devices = readData();
+  const device = findDevice(devices, id);
+  if (!device || device.admission !== 'pending') return null;
+  device.admission = decision;
+  device.updatedAt = new Date().toISOString();
+  writeData(devices);
+  logs.append({ type: 'device', message: `Device ${decision}: ${device.name}`, meta: { deviceId: id } });
+  return publicDevice(device);
+};
+
+exports.requireApproved = (id) => {
+  const device = findDevice(readData(), id);
+  if (device && device.admission && device.admission !== 'approved') {
+    const error = new Error('Device is not approved');
+    error.status = 403;
+    error.statusCode = 403;
+    throw error;
+  }
 };
 
 exports.create = ({ name, ip, type, firmware, capabilities }) => {
@@ -138,6 +163,7 @@ exports.register = ({ id, name, ip, type, firmware, capabilities }) => {
   const existing = findDevice(devices, deviceId);
 
   if (existing) {
+    if (existing.admission === 'rejected' || existing.admission === 'pending') return publicDevice(existing);
     existing.name = name || existing.name;
     existing.ip = ip || existing.ip || null;
     existing.type = type || existing.type || 'esp';
@@ -160,6 +186,7 @@ exports.register = ({ id, name, ip, type, firmware, capabilities }) => {
 
   const device = {
     id: deviceId,
+    admission: 'pending',
     name: name || `ESP ${deviceId.slice(0, 8)}`,
     ip: ip || null,
     type: type || 'esp',
@@ -177,7 +204,7 @@ exports.register = ({ id, name, ip, type, firmware, capabilities }) => {
   writeData(devices);
   logs.append({
     type: 'device',
-    message: `Device registered: ${device.name}`,
+    message: `Connection requested: ${device.name}`,
     meta: { deviceId: device.id, ip: device.ip, firmware: device.firmware }
   });
 
@@ -185,6 +212,7 @@ exports.register = ({ id, name, ip, type, firmware, capabilities }) => {
 };
 
 exports.heartbeat = (id, { status, ip, firmware, capabilities } = {}) => {
+  exports.requireApproved(id);
   const devices = readData();
   const device = findDevice(devices, id);
 
@@ -252,6 +280,7 @@ exports.remove = (id) => {
 };
 
 exports.getCommands = (id) => {
+  exports.requireApproved(id);
   const device = findDevice(readData(), id);
 
   if (!device) {
@@ -262,6 +291,7 @@ exports.getCommands = (id) => {
 };
 
 exports.queueCommand = (id, { type, payload }) => {
+  exports.requireApproved(id);
   const devices = readData();
   const device = findDevice(devices, id);
 
@@ -296,6 +326,7 @@ exports.queueCommand = (id, { type, payload }) => {
 };
 
 exports.claimNextCommand = (id) => {
+  exports.requireApproved(id);
   const devices = readData();
   const device = findDevice(devices, id);
 
@@ -305,7 +336,8 @@ exports.claimNextCommand = (id) => {
 
   device.commands = Array.isArray(device.commands) ? device.commands : [];
 
-  const command = device.commands.find(item => item.status === 'queued');
+  const available = item => item.status === 'queued' && (!item.expiresAt || Date.parse(item.expiresAt) > Date.now());
+  const command = device.commands.find(item => item.type === 'probe' && available(item)) || device.commands.find(available);
 
   if (!command) {
     return false;
@@ -328,6 +360,7 @@ exports.claimNextCommand = (id) => {
 };
 
 exports.ackCommand = (deviceId, commandId, { status, result, error }) => {
+  exports.requireApproved(deviceId);
   const devices = readData();
   const device = findDevice(devices, deviceId);
 
@@ -342,6 +375,9 @@ exports.ackCommand = (deviceId, commandId, { status, result, error }) => {
   if (!command) {
     return false;
   }
+
+  if (command.expiresAt && Date.parse(command.expiresAt) <= Date.now()) return false;
+  if (command.status !== 'running') return false;
 
   const now = new Date().toISOString();
 
@@ -361,4 +397,28 @@ exports.ackCommand = (deviceId, commandId, { status, result, error }) => {
   });
 
   return command;
+};
+
+exports.verify = (id) => {
+  exports.requireApproved(id);
+  const devices = readData();
+  const device = findDevice(devices, id);
+  if (!device) return null;
+  if (!(device.capabilities || []).includes('probe')) return { status: 'unsupported' };
+  device.commands = device.commands || [];
+  const active = device.commands.find(c => c.type === 'probe' && ['queued', 'running'].includes(c.status) && Date.parse(c.expiresAt) > Date.now());
+  if (active) return active;
+  device.commands = device.commands.filter(c => c.type !== 'probe');
+  const now = new Date().toISOString();
+  const command = { id: newId(), type: 'probe', payload: {}, status: 'queued', createdAt: now, updatedAt: now, expiresAt: new Date(Date.now() + 6000).toISOString() };
+  device.commands.push(command);
+  writeData(devices);
+  return command;
+};
+
+exports.verification = (id, commandId) => {
+  const commands = exports.getCommands(id);
+  const command = commands && commands.find(c => c.id === commandId && c.type === 'probe');
+  if (!command) return null;
+  return { status: command.status === 'done' ? 'confirmed' : command.status === 'failed' || Date.parse(command.expiresAt) <= Date.now() ? 'no-response' : 'checking' };
 };
